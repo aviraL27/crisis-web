@@ -47,12 +47,11 @@ const server = http.createServer((req, res) => {
   const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
   const pathname = parsedUrl.pathname;
 
-  // Handle /api/verify endpoint (mimicking Vercel serverless functions)
-  if (pathname === '/api/verify') {
+  // Handle /api/verify and /api/leaderboard endpoints
+  if (pathname === '/api/verify' || pathname === '/api/leaderboard') {
     let bodyData = '';
     req.on('data', chunk => { bodyData += chunk; });
-    req.on('end', () => {
-      // Mock Express/Vercel request/response object
+    req.on('end', async () => {
       const vReq = {
         method: req.method,
         body: bodyData,
@@ -74,8 +73,9 @@ const server = http.createServer((req, res) => {
       };
 
       try {
-        const handler = require('./api/verify.js');
-        handler(vReq, vRes);
+        const handlerName = pathname === '/api/verify' ? './api/verify.js' : './api/leaderboard.js';
+        const handler = require(handlerName);
+        await handler(vReq, vRes);
       } catch (err) {
         res.statusCode = 500;
         res.setHeader('Content-Type', 'application/json');

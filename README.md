@@ -1,8 +1,31 @@
-# ⬛ Minimal Leaderboard (Two-Page Setup)
+# ⬛ Minimal Leaderboard (Multi-Device Sync)
 
 A minimal, high-contrast monochrome leaderboard web app built strictly following the **[Impeccable Design System](https://impeccable.style)** by Paul Bakaus.
 
 Audited and verified with `npx impeccable detect`: **0 anti-patterns found**.
+
+---
+
+## 🌐 Multi-Device Shared Synchronization
+
+The leaderboard is synchronized across **all machines, devices, and projector screens** via the serverless API `/api/leaderboard`:
+
+1. **Admin Edits on Device A**: Adding teams, adjusting scores (`+5`, `+10`, `+30`, `+50`, `-5`), or deleting teams broadcasts changes to the shared store.
+2. **Audience / Projector on Device B**: The public landing page polls `/api/leaderboard` in the background and updates the display live within 2 seconds without requiring any manual reload.
+
+---
+
+## ⚡ Enabling Global Multi-Device Sync on Vercel
+
+On Vercel, connect **Vercel KV** (powered by Upstash Redis) in 1 click:
+
+1. Open your project dashboard on [Vercel](https://vercel.com).
+2. Go to the **Storage** tab &rarr; Click **Create Database** &rarr; Select **KV**.
+3. Choose a name and click **Create**.
+4. Click **Connect to Project** &rarr; Select `crisis-web`.
+5. Vercel automatically injects `KV_REST_API_URL` and `KV_REST_API_TOKEN`.
+
+*Once connected, any changes made from your admin console will instantly update all devices and screens globally!*
 
 ---
 
@@ -14,15 +37,15 @@ Audited and verified with `npx impeccable detect`: **0 anti-patterns found**.
   - Clean, distraction-free rankings: **Rank**, **Team Name**, and **Points**.
   - Inverted highlight for the **#1 Leader**.
   - Real-time search filter and team counter.
-  - **Live Cross-Tab Sync**: Automatically updates when scores change on the Admin page without needing a manual refresh.
-  - **Unlinked & Clean**: No visible admin buttons on the public screen (navigate manually to `/admin.html`).
+  - Automatic background polling (updates every 2 seconds).
+  - Unlinked & clean: No visible admin buttons on the public screen (navigate manually to `/admin.html`).
 
 ### 2. ⚙️ Protected Score Management ([`admin.html`](./admin.html))
 - **Purpose**: Secure control console for judges, event coordinators, and admins.
 - **🔒 Password Protection**:
   - Gated by a serverless verification endpoint (`/api/verify`).
   - Password is **never hardcoded** in frontend code and is securely read from environment variables (`ADMIN_PASSWORD`).
-  - Active session authentication stored in `sessionStorage` with a manual **Lock** button to secure the terminal when stepping away.
+  - Active session authentication stored in `sessionStorage` with a manual **Lock** button.
 - **Features**:
   - **Add Team Form**: Enter team name and starting points.
   - **Quick Adjust Buttons**: One-click score offsets (`+5`, `+10`, `+30`, `+50`, and `-5`).
@@ -34,37 +57,22 @@ Audited and verified with `npx impeccable detect`: **0 anti-patterns found**.
 
 ---
 
-## 🔐 Environment Variables & Security
+## 🔐 Environment Variables
 
-The admin password is set via the `ADMIN_PASSWORD` environment variable.
-
-Local `.env` file (ignored by Git):
-```env
-ADMIN_PASSWORD=crisisnotsoeasy404
-```
-
-A template `.env.example` is tracked for reference:
-```env
-ADMIN_PASSWORD=your_secure_password_here
-```
+- `ADMIN_PASSWORD`: Admin password for `/admin.html` (e.g. `crisisnotsoeasy404`).
+- `KV_REST_API_URL` & `KV_REST_API_TOKEN`: Automatically provided by Vercel when connecting Vercel KV.
 
 ---
 
-## 🚀 Running Locally & Deploying to Vercel
+## 🚀 Running Locally & Deploying
 
-### Run Locally (With Password Verification)
-Run the lightweight built-in server (zero external npm dependencies):
+### Run Locally (With Multi-Device Local Sync)
 ```bash
 node server.js
 ```
-Then visit:
-- **Public Leaderboard**: `http://localhost:3000`
-- **Protected Admin Console**: `http://localhost:3000/admin.html`
+Devices on your local network (e.g. `http://<your-ip>:3000`) share the same standings automatically!
 
 ### Deploy to Vercel
-1. Push this repository to GitHub (the `.gitignore` ensures your `.env` secret is never exposed).
-2. Import the project into [Vercel](https://vercel.com).
-3. In **Project Settings → Environment Variables**, add:
-   - **Key**: `ADMIN_PASSWORD`
-   - **Value**: `crisisnotsoeasy404`
-4. Click **Deploy**. Vercel will automatically host the static frontend and execute `/api/verify` as a zero-config serverless function!
+Push to GitHub and deploy on Vercel. In **Project Settings → Environment Variables**, add:
+- `ADMIN_PASSWORD`: `crisisnotsoeasy404`
+- Connect **Vercel KV** under the **Storage** tab for global persistence across all devices.

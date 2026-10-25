@@ -1,17 +1,30 @@
 /**
  * ADMIN SCORE MANAGEMENT CONTROLLER (admin.html)
- * Password gate, serverless /api/verify validation, score editing & real-time sync
+ * Password gate, serverless /api/verify validation, score editing & cross-device sync
  */
 
 const STORAGE_KEY = 'minimal_leaderboard_standings';
 const AUTH_SESSION_KEY = 'admin_session_auth';
 
+// Cryptographic SHA-256 hash used exclusively when running via file:/// protocol (offline/no-server mode)
+// The plaintext password remains strictly in .env and is never hardcoded
+const FILE_PROTOCOL_HASH = '48cae8551383e434e97bdb4906954c97297bb8d2bfb2cc70cae398cb5230f847';
+
 const state = {
   teams: [],
   searchQuery: '',
   editingTeamId: null,
-  isAuthenticated: false
+  isAuthenticated: false,
+  isSyncing: false
 };
+
+async function calculateSha256(str) {
+  const buf = new TextEncoder().encode(str);
+  const hashBuf = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hashBuf))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
 
 // ========================================================
 // AUTHENTICATION GATE & API VERIFICATION
@@ -27,6 +40,7 @@ function checkAuthStatus() {
     if (contentEl) contentEl.classList.remove('hidden');
     loadTeams();
     renderAdminTable();
+    fetchSharedTeams();
   } else {
     state.isAuthenticated = false;
     if (gateEl) gateEl.classList.remove('hidden');
@@ -34,18 +48,6 @@ function checkAuthStatus() {
     const pwdInput = document.getElementById('admin-password-input');
     if (pwdInput) pwdInput.focus();
   }
-}
-
-// Cryptographic SHA-256 hash used exclusively when running via file:/// protocol (offline/no-server mode)
-// The plaintext password remains strictly in .env and is never hardcoded
-const FILE_PROTOCOL_HASH = '48cae8551383e434e97bdb4906954c97297bb8d2bfb2cc70cae398cb5230f847';
-
-async function calculateSha256(str) {
-  const buf = new TextEncoder().encode(str);
-  const hashBuf = await crypto.subtle.digest('SHA-256', buf);
-  return Array.from(new Uint8Array(hashBuf))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
 }
 
 async function verifyPassword(password) {
@@ -61,8 +63,7 @@ async function verifyPassword(password) {
   const cleanPassword = (password || '').trim();
 
   try {
-    // If user opened file:/// directly in browser, CORS blocks fetch('/api/verify').
-    // Use cryptographic SHA-256 hash verification so double-clicking the HTML file works offline.
+    // If user opened file:/// directly in browser, use offline SHA-256 hash
     if (window.location.protocol === 'file:') {
       const hash = await calculateSha256(cleanPassword);
       if (hash === FILE_PROTOCOL_HASH) {
@@ -123,7 +124,7 @@ function lockConsole() {
 }
 
 // ========================================================
-// PERSISTENCE (LocalStorage)
+// PERSISTENCE & CROSS-DEVICE CLOUD SYNC
 // ========================================================
 function loadTeams() {
   try {
@@ -135,11 +136,50 @@ function loadTeams() {
   }
 }
 
-function saveTeams() {
+async function fetchSharedTeams() {
+  if (window.location.protocol === 'file:') return;
+
+  try {
+    const res = await fetch('/api/leaderboard', { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.teams)) {
+        const newJson = JSON.stringify(data.teams);
+        const currentJson = JSON.stringify(state.teams);
+        if (newJson !== currentJson && !state.isSyncing) {
+          state.teams = data.teams;
+          try { localStorage.setItem(STORAGE_KEY, newJson); } catch (e) {}
+          renderAdminTable();
+        }
+      }
+    }
+  } catch (e) {
+    // Ignore network hiccups
+  }
+}
+
+async function saveTeamsAndSync() {
+  // Save locally first for instant feedback
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state.teams));
   } catch (err) {
     console.error('Failed writing storage:', err);
+  }
+
+  // Push to shared server for multi-device broadcast
+  if (window.location.protocol !== 'file:') {
+    state.isSyncing = true;
+    try {
+      await fetch('/api/leaderboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teams: state.teams })
+      });
+    } catch (err) {
+      console.error('Error broadcasting update to server:', err);
+    } finally {
+      state.isSyncing = false;
+    }
   }
 }
 
@@ -224,7 +264,7 @@ function renderAdminTable() {
 // ========================================================
 // TEAM MANAGEMENT
 // ========================================================
-function addTeam(name, points) {
+async function addTeam(name, points) {
   const cleanName = name.trim();
   if (!cleanName) return false;
 
@@ -242,37 +282,37 @@ function addTeam(name, points) {
   };
 
   state.teams.push(newTeam);
-  saveTeams();
   renderAdminTable();
+  await saveTeamsAndSync();
   return true;
 }
 
-function adjustPoints(teamId, delta) {
+async function adjustPoints(teamId, delta) {
   const team = state.teams.find(t => t.id === teamId);
   if (!team) return;
 
   team.points = Math.max(0, team.points + delta);
-  saveTeams();
   renderAdminTable();
+  await saveTeamsAndSync();
 }
 
-function deleteTeam(teamId) {
+async function deleteTeam(teamId) {
   const team = state.teams.find(t => t.id === teamId);
   if (!team) return;
 
   if (confirm(`Remove "${team.name}" from the standings?`)) {
     state.teams = state.teams.filter(t => t.id !== teamId);
-    saveTeams();
     renderAdminTable();
+    await saveTeamsAndSync();
   }
 }
 
-function clearAllTeams() {
+async function clearAllTeams() {
   if (state.teams.length === 0) return;
   if (confirm('Clear all teams and scores from the leaderboard?')) {
     state.teams = [];
-    saveTeams();
     renderAdminTable();
+    await saveTeamsAndSync();
   }
 }
 
@@ -328,7 +368,7 @@ function closeEditModal() {
   state.editingTeamId = null;
 }
 
-function saveModalPoints() {
+async function saveModalPoints() {
   if (!state.editingTeamId) return;
   const pointsInput = document.getElementById('modal-points-input');
   if (!pointsInput) return;
@@ -339,8 +379,8 @@ function saveModalPoints() {
   const team = state.teams.find(t => t.id === state.editingTeamId);
   if (team) {
     team.points = Math.max(0, newPoints);
-    saveTeams();
     renderAdminTable();
+    await saveTeamsAndSync();
   }
 
   closeEditModal();
@@ -457,10 +497,17 @@ document.addEventListener('DOMContentLoaded', () => {
   // Cross-tab sync
   window.addEventListener('storage', (e) => {
     if (e.key === STORAGE_KEY || e.key === null) {
-      if (state.isAuthenticated) {
+      if (state.isAuthenticated && !state.isSyncing) {
         loadTeams();
         renderAdminTable();
       }
     }
   });
+
+  // Cross-device sync interval (every 4 seconds for admin)
+  setInterval(() => {
+    if (state.isAuthenticated && !state.isSyncing) {
+      fetchSharedTeams();
+    }
+  }, 4000);
 });

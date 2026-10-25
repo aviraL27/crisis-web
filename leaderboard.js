@@ -1,23 +1,58 @@
 /**
  * PUBLIC LIVE LEADERBOARD (index.html)
- * Real-time display for audience / projectors
- * Automatically syncs with admin changes across tabs
+ * Real-time display for audience / projectors across ALL devices
+ * Regularly fetches from /api/leaderboard to stay synchronized globally
  */
 
 const STORAGE_KEY = 'minimal_leaderboard_standings';
 
 const state = {
   teams: [],
-  searchQuery: ''
+  searchQuery: '',
+  lastServerTimestamp: 0
 };
 
-function loadTeams() {
+// Fetch shared standings from server
+async function fetchServerStandings() {
+  if (window.location.protocol === 'file:') {
+    loadLocalFallback();
+    renderPublicLeaderboard();
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/leaderboard', { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.teams)) {
+        // Compare with current state to avoid unnecessary DOM thrashing
+        const newJson = JSON.stringify(data.teams);
+        const currentJson = JSON.stringify(state.teams);
+        if (newJson !== currentJson) {
+          state.teams = data.teams;
+          // Keep local storage synced as cache
+          try { localStorage.setItem(STORAGE_KEY, newJson); } catch (e) {}
+          renderPublicLeaderboard();
+        }
+      }
+    } else {
+      loadLocalFallback();
+      renderPublicLeaderboard();
+    }
+  } catch (err) {
+    loadLocalFallback();
+    renderPublicLeaderboard();
+  }
+}
+
+function loadLocalFallback() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    state.teams = raw ? JSON.parse(raw) : [];
+    if (raw) {
+      state.teams = JSON.parse(raw);
+    }
   } catch (err) {
-    console.error('Error loading standings:', err);
-    state.teams = [];
+    console.error('Local fallback read error:', err);
   }
 }
 
@@ -90,8 +125,10 @@ function escapeHtml(str) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  loadTeams();
+  // Initial load from cache then server
+  loadLocalFallback();
   renderPublicLeaderboard();
+  fetchServerStandings();
 
   // Search filter
   const searchInput = document.getElementById('search-input');
@@ -102,26 +139,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Cross-tab real-time sync via storage event
+  // Cross-device live sync: Poll server every 2 seconds
+  setInterval(fetchServerStandings, 2000);
+
+  // Same-device instant tab sync
   window.addEventListener('storage', (e) => {
     if (e.key === STORAGE_KEY || e.key === null) {
-      loadTeams();
+      loadLocalFallback();
       renderPublicLeaderboard();
     }
   });
-
-  // Secondary polling sync (fallback for same-origin local window instances)
-  setInterval(() => {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const count = raw ? JSON.parse(raw).length : 0;
-    const currentJson = JSON.stringify(state.teams);
-    if (raw && raw !== currentJson) {
-      loadTeams();
-      renderPublicLeaderboard();
-    } else if (!raw && state.teams.length > 0) {
-      loadTeams();
-      renderPublicLeaderboard();
-    }
-  }, 1000);
 });
-
