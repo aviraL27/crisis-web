@@ -55,7 +55,72 @@ const INITIAL_TEAMS = [
 // In-memory cache
 let inMemoryTeams = null;
 
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY;
+
+// ========================================================
+// SUPABASE REST PERSISTENCE
+// ========================================================
+async function supabaseGet() {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return null;
+  try {
+    const base = SUPABASE_URL.replace(/\/$/, '');
+    const res = await fetch(`${base}/rest/v1/leaderboard?id=eq.current&select=teams`, {
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Accept': 'application/json'
+      }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0 && Array.isArray(data[0].teams) && data[0].teams.length > 0) {
+        return data[0].teams;
+      }
+      // If table exists but empty, auto-seed with INITIAL_TEAMS
+      await supabaseSet(INITIAL_TEAMS);
+      return INITIAL_TEAMS;
+    }
+  } catch (err) {
+    console.error('Supabase read error:', err);
+  }
+  return null;
+}
+
+async function supabaseSet(teams) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return false;
+  try {
+    const base = SUPABASE_URL.replace(/\/$/, '');
+    const res = await fetch(`${base}/rest/v1/leaderboard`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify({
+        id: 'current',
+        teams: teams,
+        updated_at: new Date().toISOString()
+      })
+    });
+    return res.ok;
+  } catch (err) {
+    console.error('Supabase write error:', err);
+    return false;
+  }
+}
+
+// ========================================================
+// UPSTASH / VERCEL KV PERSISTENCE
+// ========================================================
 async function kvGet() {
+  // 1. Try Supabase first if configured
+  const fromSupabase = await supabaseGet();
+  if (fromSupabase) return fromSupabase;
+
+  // 2. Try Vercel KV / Upstash Redis
   const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -78,7 +143,7 @@ async function kvGet() {
     }
   }
 
-  // Local file fallback
+  // 3. Local file fallback (local server mode)
   const localFile = path.join(__dirname, '..', 'data', 'standings.json');
   if (fs.existsSync(localFile)) {
     try {
@@ -94,11 +159,16 @@ async function kvGet() {
 }
 
 async function kvSet(teams) {
-  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-
   inMemoryTeams = teams;
   let savedToCloud = false;
+
+  // 1. Save to Supabase if configured
+  const savedSupabase = await supabaseSet(teams);
+  if (savedSupabase) savedToCloud = true;
+
+  // 2. Save to Vercel KV if configured
+  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
   if (url && token) {
     try {
@@ -118,7 +188,7 @@ async function kvSet(teams) {
     }
   }
 
-  // Local file fallback
+  // 3. Local file fallback
   const localDir = path.join(__dirname, '..', 'data');
   const localFile = path.join(localDir, 'standings.json');
   try {
@@ -144,12 +214,16 @@ module.exports = async (req, res) => {
 
   if (req.method === 'GET') {
     const teams = await kvGet();
-    const hasCloudKV = !!(process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL);
+    const storageMode = (SUPABASE_URL && SUPABASE_KEY)
+      ? 'supabase'
+      : (process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL)
+        ? 'vercel-kv'
+        : 'local-or-memory';
 
     return res.status(200).json({
       success: true,
       teams: Array.isArray(teams) ? teams : INITIAL_TEAMS,
-      storageMode: hasCloudKV ? 'vercel-kv' : 'local-or-memory',
+      storageMode: storageMode,
       timestamp: Date.now()
     });
   }
