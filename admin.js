@@ -56,7 +56,7 @@ const INITIAL_TEAMS = [
 
 // Cryptographic SHA-256 hash used exclusively when running via file:/// protocol (offline/no-server mode)
 // The plaintext password remains strictly in .env and is never hardcoded
-const FILE_PROTOCOL_HASH = '48cae8551383e434e97bdb4906954c97297bb8d2bfb2cc70cae398cb5230f847';
+const FILE_PROTOCOL_HASH = 'a54dae3396a6febd3654bf043d361a18748665a542f379b0bec9f0db92382d26';
 
 const state = {
   teams: INITIAL_TEAMS,
