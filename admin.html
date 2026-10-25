@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manage Standings & Points</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- PASSWORD AUTHENTICATION GATE (Visible when unauthenticated) -->
+  <div id="auth-gate" class="auth-gate-overlay">
+    <div class="auth-gate-dialog" role="dialog" aria-labelledby="auth-gate-title">
+      <div class="auth-gate-header">
+        <h2 id="auth-gate-title" class="auth-gate-title">Admin Access Required</h2>
+        <p class="auth-gate-subtitle">Enter the access key configured in your environment to manage standings.</p>
+      </div>
+
+      <form id="auth-form" class="auth-form">
+        <div class="form-field">
+          <label for="admin-password-input">Admin Password</label>
+          <input 
+            type="password" 
+            id="admin-password-input" 
+            placeholder="Enter access password..." 
+            autocomplete="current-password"
+            required
+          >
+        </div>
+
+        <div id="auth-error-msg" class="auth-error hidden" role="alert">
+          Incorrect password. Access denied.
+        </div>
+
+        <div class="auth-actions">
+          <a href="index.html" class="btn-secondary nav-link-btn">&larr; Public View</a>
+          <button type="submit" id="auth-submit-btn" class="btn-primary">Unlock Console</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- AUTHENTICATED ADMIN CONTENT WRAPPER -->
+  <div id="admin-content" class="app-layout hidden">
+    
+    <!-- ADMIN HEADER -->
+    <header class="app-header">
+      <div class="header-branding">
+        <h1 class="app-title">Score Management</h1>
+        <span class="live-pill">Admin Console</span>
+      </div>
+      <div class="header-controls">
+        <a href="index.html" class="btn-secondary nav-link-btn" title="Return to public leaderboard">&larr; View Leaderboard</a>
+        <button id="lock-btn" class="btn-secondary" type="button" title="Lock admin console">Lock</button>
+        <button id="export-btn" class="btn-secondary" type="button" aria-label="Export standings to CSV">Export CSV</button>
+        <button id="reset-all-btn" class="btn-secondary btn-danger" type="button" aria-label="Clear all teams">Clear All</button>
+      </div>
+    </header>
+
+    <!-- ADD TEAM SECTION -->
+    <section class="section-block" aria-labelledby="add-team-heading">
+      <div class="section-header">
+        <h2 id="add-team-heading" class="section-title">Add Team</h2>
+      </div>
+      <form id="add-team-form" class="entry-form">
+        <div class="form-field name-field">
+          <label for="team-name-input">Team Name</label>
+          <input 
+            type="text" 
+            id="team-name-input" 
+            placeholder="e.g. Apollo, Horizon..." 
+            autocomplete="off" 
+            required 
+            maxlength="40"
+          >
+        </div>
+
+        <div class="form-field points-field">
+          <label for="initial-points-input">Points</label>
+          <input 
+            type="number" 
+            id="initial-points-input" 
+            placeholder="0" 
+            value="0" 
+            step="1" 
+            required
+          >
+        </div>
+
+        <div class="form-field submit-field">
+          <button type="submit" class="btn-primary">Add Team</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- MANAGE SCORES SECTION -->
+    <section class="section-block" aria-labelledby="manage-heading">
+      <div class="section-header space-between">
+        <h2 id="manage-heading" class="section-title">Manage Standings & Points</h2>
+        <div class="toolbar-actions">
+          <div class="search-field">
+            <label for="search-input" class="sr-only">Search teams</label>
+            <input type="search" id="search-input" placeholder="Search teams...">
+          </div>
+          <span id="teams-count" class="meta-badge">0 teams</span>
+        </div>
+      </div>
+
+      <!-- MANAGEMENT TABLE -->
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col" class="col-rank">Rank</th>
+              <th scope="col" class="col-team">Team</th>
+              <th scope="col" class="col-points">Points</th>
+              <th scope="col" class="col-adjust">Quick Adjust</th>
+              <th scope="col" class="col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="admin-tbody">
+            <!-- Rendered via admin.js -->
+          </tbody>
+        </table>
+
+        <!-- EMPTY STATE -->
+        <div id="empty-state" class="empty-state-card">
+          <div class="empty-symbol" aria-hidden="true">—</div>
+          <h3 class="empty-heading">No teams registered yet</h3>
+          <p class="empty-copy">Add a team name and initial points above to populate the standings.</p>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- EDIT POINTS MODAL -->
+  <div id="edit-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="modal-title" class="modal-title">Adjust Score</h3>
+        <button id="modal-close-btn" class="modal-close-icon" type="button" aria-label="Close dialog">&times;</button>
+      </div>
+      <div class="modal-content">
+        <p class="modal-subtext">Updating score for <strong id="modal-team-name"></strong></p>
+        <div class="form-field">
+          <label for="modal-points-input">New Score Total</label>
+          <input type="number" id="modal-points-input" step="1">
+        </div>
+        <div class="modal-deltas">
+          <span class="deltas-label">Quick offsets:</span>
+          <div class="chips-row">
+            <button type="button" class="delta-chip" data-delta="5">+5</button>
+            <button type="button" class="delta-chip" data-delta="10">+10</button>
+            <button type="button" class="delta-chip" data-delta="30">+30</button>
+            <button type="button" class="delta-chip" data-delta="50">+50</button>
+            <button type="button" class="delta-chip" data-delta="-5">-5</button>
+            <button type="button" class="delta-chip" data-delta="-10">-10</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="modal-cancel-btn" class="btn-secondary" type="button">Cancel</button>
+        <button id="modal-save-btn" class="btn-primary" type="button">Save Points</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="admin.js"></script>
+</body>
+</html>

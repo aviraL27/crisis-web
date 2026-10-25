@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Leaderboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-layout">
+    
+    <!-- MAIN SITE HEADER -->
+    <header class="app-header">
+      <div class="header-branding">
+        <h1 class="app-title">Leaderboard</h1>
+        <span class="live-pill">Live Standings</span>
+      </div>
+    </header>
+
+    <!-- PUBLIC STANDINGS SECTION -->
+    <main class="section-block" aria-labelledby="standings-heading">
+      <div class="section-header space-between">
+        <h2 id="standings-heading" class="section-title">Current Standings</h2>
+        <div class="toolbar-actions">
+          <div class="search-field">
+            <label for="search-input" class="sr-only">Search teams</label>
+            <input type="search" id="search-input" placeholder="Search teams...">
+          </div>
+          <span id="teams-count" class="meta-badge">0 teams</span>
+        </div>
+      </div>
+
+      <!-- PUBLIC LEADERBOARD TABLE -->
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col" class="col-rank">Rank</th>
+              <th scope="col" class="col-team">Team</th>
+              <th scope="col" class="col-points-public">Points</th>
+            </tr>
+          </thead>
+          <tbody id="public-leaderboard-tbody">
+            <!-- Rendered live via JavaScript -->
+          </tbody>
+        </table>
+
+        <!-- EMPTY STATE -->
+        <div id="empty-state" class="empty-state-card">
+          <div class="empty-symbol" aria-hidden="true">—</div>
+          <h3 class="empty-heading">No teams registered yet</h3>
+          <p class="empty-copy">Standings will appear here once scores are recorded.</p>
+        </div>
+      </div>
+    </main>
+
+  </div>
+
+  <script src="leaderboard.js"></script>
+</body>
+</html>
